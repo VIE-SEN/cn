@@ -1,0 +1,1030 @@
+<template>
+  <div class="optimizedRoute">
+    <div class="header">
+      <div class="center_info">
+        Optimized route
+      </div>
+      <div class="user_icon" @click="goBack"><i class="el-icon-arrow-left"></i></div>
+    </div>
+    <div class="TaskListContainer">
+      <div class="mapInfoContainer">
+        <div id="mapWrap">
+
+        </div>
+      </div>
+      <div class="taskContent">
+        <div class="taskItem" v-if="index" :class="getBtnClass(item)" v-for="(item,index) in mapMarkObj" @click="changeItem(item,index.toString())">
+        	{{getTaskItemText(item,index)}}
+        </div>
+      </div>
+      <div class="loadingContent" v-show="!taskLoading">
+        <i class="el-icon-loading"></i>
+      </div>
+      <div class="taskListWrap" v-show="taskLoading">
+        <routeItem :currentInfo="currentTask" :showOrder="showOrder" :currentRouteType="currentRouteType" :currentLocation="currentLocation" @confirmDone="confirmDone" @confirmArrived="confirmArrived" @refresh="refresh"></routeItem>
+      </div>
+    </div>
+    <div class="confirmContainer" v-show="confirmWindow">
+      <i class="el-icon-error closeWindow" @click="confirmWindow = false"></i>
+      <p class="confirmTitle">
+        {{currentRouteType == 'sender' ? "Please confirm you have picked these items：" : "Please confirm you have delivered these items："}}
+      </p>
+      <div class="itemLists">
+        <div v-for="item in checkedList" class="singleList">
+          <p class="itemName" v-text="item.goods_name">
+          </p>
+          <cusCheckbox :checkedObj="item"></cusCheckbox>
+        </div>
+      </div>
+      <div class="singleList">
+        <p class="itemName">
+          Total: {{currentTask.goods_list && currentTask.goods_list.length}} packages
+        </p>
+        <cusCheckbox :checkedObj="totalCheck"></cusCheckbox>
+      </div>
+      <div class="payBtnWrap">
+        <div class="actionCommon confirm error" @click="failPicked">Failed</div>
+        <div class="actionCommon confirm" @click="confirmPicked">
+          {{currentRouteType == 'sender' ? "Picked up" : "Delivered"}}
+        </div>
+      </div>
+    </div>
+    <div class="confirmContainer" v-show="errorWindow">
+      <i class="el-icon-error closeWindow" @click="errorWindow = false"></i>
+      <p class="confirmTitle">{{getDoneTitle('error')}}</p>
+      <div class="errorInfoContainer">
+        <div class="singleFormItem">
+          <p class="formItemTitle">Comment:</p>
+          <div class="inputWrap" style="margin-bottom: 0.2rem;">
+            <el-input type="textarea" :rows="4" resize="none" :autosize="true" v-model="errorDoneComment" placeholder=""></el-input>
+          </div>
+        </div>
+        <p class="formItemTitle">{{currentTask.status == 5 ? 'Take photo of all items:' : 'Take photo:'}}</p>
+        <div class="photoPreview" v-if="photoArr.length">
+          <img :src="item" v-for="item in photoArr" />
+        </div>
+        <div class="loadingContent" v-show="imageLoading">
+	        <i class="el-icon-loading"></i>
+	      </div>
+        <div class="photoBtnWrap">
+          <div @click="choosePic">
+            <input id="fileImage" class="fileImage" type="file" accept="image/*" size="1" style="display: none;" @change="filechange">
+            <img src="../../assets/image/takePhoto.png" />
+          </div>
+        </div>
+      </div>
+      <div class="payBtnWrap">
+        <div class="actionCommon confirm" @click="infoSubmit('error')">Submit</div>
+      </div>
+    </div>
+    <div class="confirmContainer" v-show="doneWindow">
+      <i class="el-icon-error closeWindow" @click="doneWindow = false"></i>
+      <p class="confirmTitle">{{getDoneTitle('done')}}</p>
+      <div class="errorInfoContainer">
+        <div class="singleFormItem">
+          <p class="formItemTitle">Comment:</p>
+          <div class="inputWrap" style="margin-bottom: 0.2rem;">
+            <el-input type="textarea" :rows="4" resize="none" :autosize="true" v-model="errorDoneComment" placeholder=""></el-input>
+          </div>
+        </div>
+        <p class="formItemTitle">{{currentTask.status == 5 ? 'Take photo of all items:' : 'Take photo:'}}</p>
+        <div class="photoPreview" v-if="photoArr.length">
+          <img :src="item" v-for="item in photoArr" />
+        </div>
+        <div class="loadingContent" v-show="imageLoading">
+	        <i class="el-icon-loading"></i>
+	      </div>
+        <div class="photoBtnWrap">
+          <div @click="choosePic">
+            <input id="fileImage" class="fileImage" type="file" accept="image/*" size="1" style="display: none;" @change="filechange">
+            <img src="../../assets/image/takePhoto.png" />
+          </div>
+        </div>
+      </div>
+      <div class="payBtnWrap">
+        <div class="actionCommon confirm" @click="infoSubmit('done')">Done</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  let driverIcon = "data:image/png;base64,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";
+  import cusCheckbox from "@/components/cusCheckbox.vue"
+  import routeItem from "@/components/routeItem.vue"
+  // @ is an alias to /src
+  export default {
+    name: 'optimizedRoute',
+    components: {
+      routeItem,
+      cusCheckbox
+    },
+    data() {
+      return {
+        currentTask: {},
+        currentLocation: {},
+        dateOption: this.getDateOption(),
+        mapMarkObj: {},
+        map: null,
+        infoWindow: null,
+        tipTotal: 0,
+        MarkList: {},
+        checkedList: [],
+        totalCheck: {
+          checked: false,
+          changable: false
+        },
+        confirmWindow: false,
+        driver_id: "",
+        uploadPhotoArr: [],
+        errorWindow: false,
+        doneWindow: false,
+        errorDoneComment: "",
+        photoArr: [],
+        currentRouteType: "",
+        showOrder:"",
+        taskLoading: false,
+        changeLock: false,
+        routeObj:{},
+        imageLoading:false,
+        completeOrders:[],
+      }
+    },
+    mounted() {
+      this.driver_id = sessionStorage.getItem("loginInfo") ? JSON.parse(sessionStorage.getItem("loginInfo")).id : "";
+      let routeArr = this.$route.params.info || sessionStorage.getItem("routeArr");
+      if(routeArr) {
+        if(routeArr.length > 1) {
+          this.mapMarkObj = routeArr;
+          let order_id = routeArr[1].order_id;
+          this.showOrder = "1";
+          this.currentRouteType = "sender"
+          this.getTaskInfo(order_id);
+          this.initMap();
+          let _this = this;
+          routeArr.map(function(item,index){
+            if(item.order_id){
+              _this.routeObj[index] = item.order_id              
+            }
+          })
+        }
+      } else {
+        this.$router.go(-1)
+      }
+
+    },
+    methods: {
+      getTaskItemText(item,index){
+        if(index > 0){
+          if(item.type == "sender"){
+            return index + ":Pickup";
+          }else{
+            return index + ":Delivery";
+          }
+        }else{
+          return "driver"
+        }
+      },
+      changeItem(item,index){
+        this.currentRouteType = item.type;
+        this.showOrder = index;
+        this.hideConfirm();
+        this.getTaskInfo(item.order_id, false, true)
+      },
+      getDoneTitle(type) {
+        if(this.currentRouteType == 'sender') {
+          return type == "done" ? 'Final step of pickup:' : 'Describe the issue of pickup：'
+        } else if(this.currentRouteType == 'receiver') {
+          return type == 'done' ? "Final step of delivery:" : "Describe the issue of delivery："
+        } else {
+          return ""
+        }
+
+      },
+      getBtnClass(item){
+        // TODO
+        if(item.type == "sender"){
+          if(item.status < 5){
+            //未取件
+            return "sender active"
+          }else if(item.status == 5){
+            //已经取件
+            return "sender deactive"
+          }else if(item.status == 7){
+            //错误件
+            return "sender deactive"
+          }
+          
+        }else if(item.type == "receiver"){
+          if(item.status < 5){
+            //未取件
+            return "receiver deactive"
+          }else if(item.status == 5){
+            //已经取件
+            return "receiver active"
+          }else if(item.status == 7){
+            //错误件
+            return "receiver deactive"
+          }
+        }
+        return item.type
+      },
+      choosePic() {
+        document.getElementById("fileImage").click()
+      },
+      filechange(e) {
+        if(e.target.files.length) {
+        	this.imageLoading = true;
+          this.uploadFile(e.target.files[0])
+        }
+      },
+      uploadFile(file) {
+        let uploadFileName = file.name.split(".");
+        if(uploadFileName.length > 1) {
+          //存在后缀名
+          uploadFileName = uploadFileName[uploadFileName.length - 1]
+        } else {
+        	this.imageLoading = false;
+          this.$message.closeAll();
+          this.$message({
+            message: "Unrecognized file format",
+            type: 'error'
+          });
+          return;
+        }
+        let tempfile = new File([file], "order_d_" + this.currentTask.order_id + "_(" + this.driver_id + ")_" + this.photoArr.length + "." + uploadFileName);
+        let formdatafile = new FormData();
+        formdatafile.append("upload", tempfile);
+        this.$http({
+          url: "/api/file/a",
+          method: "POST",
+          data: formdatafile,
+          uploadFile: true
+        }).then(res => {
+          console.log(res)
+          this.imageLoading = false;
+          this.$message.closeAll();
+          if(res.data.code) {
+            this.$message({
+              message: res.data.msg,
+              type: 'error'
+            });
+          } else {
+            this.$message({
+              message: "Picture added",
+              type: 'success'
+            });
+            this.generateImgSrc(tempfile);
+            this.uploadPhotoArr.push(res.data.data.f)
+            sessionStorage.setItem("uploadedImg", JSON.stringify(this.uploadPhotoArr));
+          }
+        }).catch(err => {
+          console.log(err)
+          this.$message({
+            message: err.statusText,
+            type: 'error'
+          });
+        })
+      },
+      generateImgSrc(file) {
+        let _this = this;
+        let imgReader = new FileReader();
+        imgReader.readAsDataURL(file);
+        imgReader.onload = function(evt) {
+          _this.photoArr.push(evt.target.result)
+        }
+
+      },
+      failPicked() {
+        this.hideConfirm();
+        this.errorWindow = true;
+      },
+      infoSubmit(info) {
+        if(this.changeLock){
+          return;
+        }
+        if(info == "done") {
+          console.log("可以完结")
+          let info = {
+            relation_id: this.currentTask.order_id,
+            what: this.errorDoneComment,
+            who_id: this.driver_id,
+            comment_type: 4,
+            created_at: Math.floor(new Date().getTime() / 1000)
+          }
+          this.updateComment(info, "done")
+        } else {
+          console.log("出错订单")
+          let info = {
+            relation_id: this.currentTask.order_id,
+            what: this.errorDoneComment,
+            who_id: this.driver_id,
+            comment_type: 4,
+            created_at: Math.floor(new Date().getTime() / 1000)
+          }
+          this.updateComment(info, "error")
+        }
+      },
+      updateComment(info, type) {
+        this.changeLock = true;
+        this.$http({
+          url: "/api/comment/add",
+          method: "POST",
+          data: info
+        }).then(res => {
+          this.$message.closeAll();
+          if(res.data.code) {
+            this.$message({
+              message: "comment update error",
+              type: 'error'
+            });
+          } else {
+            this.changeLock = false;
+            if(type == "error") {
+              this.changeStatus(7)
+            } else if(type == "done") {
+              if(this.currentRouteType == "receiver") {
+                this.changeStatus(6)
+              } else {
+                this.doneWindow = false;
+              }
+            }
+          }
+        })
+      },
+      confirmPicked() {
+        //检查是否全部勾选
+        let allChecked = true
+        this.checkedList.map(function(item) {
+          if(!item.checked) {
+            allChecked = false
+          }
+        })
+        if(!this.totalCheck.checked) {
+          allChecked = false
+        }
+        if(allChecked) {
+          if(this.currentRouteType == "sender") {
+            if(this.currentTask.status < 5){
+              this.changeStatus(5)
+            }else{
+              this.hideConfirm();
+            }
+          } else {
+            //  TODO
+            this.hideConfirm();
+          }
+        } else {
+          this.$message.closeAll();
+          this.$message({
+            message: "Please confirm picked all packages!",
+            type: 'error'
+          });
+        }
+      },
+      hideConfirm() {
+        this.totalCheck.checked = false;
+        this.confirmWindow = false;
+        this.errorWindow = false;
+        this.doneWindow = false;
+        this.errorDoneComment = "";
+        this.photoArr = [];
+      },
+      changeStatus(status) {
+        if(this.changeLock){
+          return;
+        }
+        this.changeLock = true;
+        this.$http({
+          url: "/api/order/status",
+          method: "POST",
+          data: {
+            method: 1,
+            driver_current_address: "",
+            order_id: this.currentTask.order_id,
+            driver_id: this.driver_id,
+            status,
+            driver_longitude: this.currentLocation.lng,
+            driver_latitude: this.currentLocation.lat,
+          }
+        }).then(res => {
+          this.changeLock = false;
+          if(res.data.code) {
+            this.$message.closeAll();
+            this.$message({
+              message: res.data.message,
+              type: 'error'
+            });
+          } else {
+            this.refresh(this.currentTask.order_id)
+          }
+        })
+      },
+      confirmArrived() {
+        this.confirmWindow = true;
+      },
+      confirmDone() {
+        this.hideConfirm();
+        this.doneWindow = true;
+
+      },
+      goBack() {
+        this.$router.go(-1)
+      },
+      markMap() {
+        let _this = this;
+        this.loader.load().then(() => {
+          //删除标记
+          for(let order_id this.MarkList) {
+            if(order_id){
+              this.MarkList[order_id][0].onRemove();
+              this.MarkList[order_id][1].onRemove();
+            }
+          }
+          this.MarkList = {};
+          for(let i = this.mapMarkObj.length - 1; i >= 0; i--) {
+            if(this.mapMarkObj[i].type == "driver") {
+              let markTempReceive = new google.maps.Marker({
+                position: {
+                  lat: this.currentLocation.lat,
+                  lng: this.currentLocation.lng
+                },
+                map: this.map,
+                icon: driverIcon
+              });
+            } else if(this.mapMarkObj[i].type == "sender") {
+
+              let contentSender = document.createElement("div");
+              let sender = this.mapMarkObj[i]
+              contentSender.innerText = (i)
+              contentSender.classList.add('sender')
+              if(this.mapMarkObj[i].status < 5){
+                //未取件
+                contentSender.classList.add('active')
+              }else{
+                //已经取件或者出错
+                contentSender.classList.add('deactive')
+              }
+              contentSender.setAttribute("order_id", sender.order_id)
+              contentSender.setAttribute("type", "sender")
+              contentSender.setAttribute("order", i)
+              let popupSender = new this.Popup(
+                new google.maps.LatLng(sender.lat, sender.lng),
+                contentSender,
+                _this.bubbleClick
+              );
+              popupSender.setMap(this.map);
+              if(_this.MarkList[sender.order_id]) {
+                _this.MarkList[sender.order_id].push(popupSender)
+              } else {
+                _this.MarkList[sender.order_id] = [popupSender]
+              }
+
+            } else if(this.mapMarkObj[i].type == "receiver") {
+              let contentReceiver = document.createElement("div");
+              let receiver = this.mapMarkObj[i]
+              contentReceiver.innerText = (i)
+              contentReceiver.classList.add('receiver')
+              if(this.mapMarkObj[i].status < 5){
+                //未取件
+                contentSender.classList.add('deactive')
+              }else if(this.mapMarkObj[i].status == 5){
+                //已经取件或者出错
+                contentSender.classList.add('active')
+              }else{
+                //已经取件或者出错
+                contentSender.classList.add('deactive')
+              }
+              contentReceiver.setAttribute("order_id", receiver.order_id)
+              contentReceiver.setAttribute("type", "receiver")
+              contentReceiver.setAttribute("order", i)
+              let popupReceiver = new this.Popup(
+                new google.maps.LatLng(receiver.lat, receiver.lng),
+                contentReceiver,
+                _this.bubbleClick
+              );
+              popupReceiver.setMap(this.map);
+              if(_this.MarkList[receiver.order_id]) {
+                _this.MarkList[receiver.order_id].push(popupReceiver)
+              } else {
+                _this.MarkList[receiver.order_id] = [popupReceiver]
+              }
+            }
+          }
+        });
+      },
+      bubbleClick(e) {
+        let ele = e.target;
+        let order_id = ele.getAttribute("order_id");
+        this.currentRouteType = ele.getAttribute("type");
+        this.showOrder = ele.getAttribute("order")
+        this.hideConfirm();
+        this.getTaskInfo(order_id, false, true)
+      },
+      initMap() {
+        let _this = this;
+
+        this.currentLocation = {
+          lat: this.mapMarkObj[0].lat,
+          lng: this.mapMarkObj[0].lng
+        };
+        this.loader.load().then(() => {
+          _this.map = new google.maps.Map(document.getElementById("mapWrap"), {
+            center: {
+              lat: this.currentLocation.lat,
+              lng: this.currentLocation.lng
+            },
+            zoom: 10,
+          });
+          this.markMap();
+        });
+      },
+      refresh(order_id) {
+        this.hideConfirm();
+        this.getTaskInfo(order_id, true)
+      },
+      jumpRoute(path) {
+        this.$router.push({
+          path: "/" + path,
+          name,
+          params: {
+            info: "null"
+          }
+        }).catch(err => {
+          err
+        })
+      },
+      centerMap(){
+      	console.log(this.currentRouteType)
+      	let centerPos;
+      	if(this.currentRouteType == "sender"){
+      		centerPos = {
+      			lat:this.currentTask.latitude,
+      			lng:this.currentTask.longitude
+      		}
+      	}else if(this.currentRouteType == "receiver"){
+      		centerPos = {
+      			lat:this.currentTask.receiver_latitude,
+      			lng:this.currentTask.receiver_longitude
+      		}
+      	}else{
+      		centerPos = {
+      			lat:this.currentTask.latitude,
+      			lng:this.currentTask.longitude
+      		}
+      	}
+      	this.map.setCenter(centerPos)
+      	//this.map.setZoom(14)
+      },
+      getTaskInfo(order_id, check, bubbleChange) {
+        this.taskLoading = false;
+        this.$http({
+          url: "/api/order/detail",
+          method: "GET",
+          params: {
+            order_id: order_id
+          }
+        }).then(res => {
+          this.$message.closeAll();
+          if(res.data.code) {
+            this.$message({
+              message: res.data.message,
+              type: 'error'
+            });
+          } else {
+            let order_info = res.data.data.order_info;
+            for (let i = 0; i < this.mapMarkObj.length; i++) {
+            	if(this.mapMarkObj[i].orderid == order_info.order_id){
+            	  this.mapMarkObj[i].status = order_info.status;
+            	}
+            }
+            this.markMap();
+            if(check) {
+              if(order_info.status == 6) {
+                this.$message({
+                  message: "Task completed!",
+                  type: 'success'
+                })
+                let order_id = order_info.order_id;
+                this.completeOrders.push(order_id);
+                
+                //删除更新后的mapMarkObj
+                for(let key in this.routeObj){
+                  if(this.routeObj[key] == order_id){
+                    deleteKey.push(key)
+                  }
+                }
+                //删除缓存的待处理orderid
+                /*
+                let deleteKey = [];
+                for(let key in this.routeObj){
+                  if(this.routeObj[key] == order_id){
+                    deleteKey.push(key)
+                  }
+                }
+                for(let i = 0; i < deleteKey.length; i++) {
+                  delete this.routeObj[deleteKey[i]]
+                }
+                */
+               let findKey;
+               for(let key in this.routeObj){
+                  if(this.completeOrders.indexOf(this.routeObj[key]) < 0){
+                    if(!fineKey){
+                      findKey = key;
+                    }
+                  }
+                }
+                let order_Id = this.routeObj[findKey];
+                this.showOrder = findKey;
+                this.currentRouteType = this.mapMarkObj[this.showOrder].type
+                this.getTaskInfo(order_Id)
+                //不再自动删除,保留所有标记
+                //else {
+                //  this.jumpRoute("mainTaskPage")
+                //}
+              } else if(order_info.status == 7) {
+                this.currentRouteType = "error";
+                this.taskLoading = true
+                this.currentTask = order_info;
+                let tempArr = []
+                order_info.goods_list.map(function(item) {
+                  tempArr.push({
+                    checked: false,
+                    changeable: false,
+                    goods_name: item.goods_name
+                  })
+                })
+                this.checkedList = tempArr
+                this.centerMap();
+              } else {
+                this.taskLoading = true
+                this.currentTask = order_info;
+                let tempArr = []
+                order_info.goods_list.map(function(item) {
+                  tempArr.push({
+                    checked: false,
+                    changeable: false,
+                    goods_name: item.goods_name
+                  })
+                })
+                this.checkedList = tempArr
+                this.centerMap();
+              }
+            } else {
+              this.taskLoading = true
+              this.currentTask = order_info;
+              let tempArr = []
+              order_info.goods_list.map(function(item) {
+                tempArr.push({
+                  checked: false,
+                  changeable: false,
+                  goods_name: item.goods_name
+                })
+              })
+              this.checkedList = tempArr
+              this.centerMap();
+            }
+          }
+        })
+      }
+    }
+  }
+</script>
+<style scoped="scoped">
+  .center_info {}
+  
+  .TaskListContainer {
+    width: 7.18rem;
+    height: calc(100% - 1.4rem);
+    top: 1.4rem;
+    left: 0;
+    right: 0;
+    margin: auto;
+    position: absolute;
+    z-index: 10;
+    border-radius: 0.2rem;
+  }
+  
+  .mainPhoto {
+    width: 7.1rem;
+    height: 4.2rem;
+    border-radius: 0.16rem;
+    background: plum;
+    margin: auto;
+  }
+  
+  .taskContainer {
+    width: 7.18rem;
+    height: 6.5rem;
+    background: #F8F8F8;
+    border-radius: 0.2rem;
+    margin: auto;
+    margin-top: 0.4rem;
+    padding: 0 0.24rem;
+    box-sizing: border-box;
+  }
+  
+  .singleOperation {
+    width: 100%;
+    height: 1.28rem;
+    background: #E5F3FA;
+    border-radius: 0.12rem;
+    border: 0.02rem solid #D9EEF9;
+    font-size: 0.36rem;
+    font-family: Helvetica;
+    color: #4C4C4C;
+    line-height: 1.28rem;
+    padding-left: 0.2rem;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    margin-bottom: 0.4rem;
+    overflow: hidden;
+  }
+  
+  .taskTitle {
+    text-align: left;
+    height: 1.4rem;
+    font-size: 0.48rem;
+    font-family: PingFangSC-Regular, PingFang SC;
+    font-weight: 400;
+    color: #000000;
+    line-height: 1.4rem;
+  }
+  
+  .taskOtherInfo {
+    padding: 0.4rem 0;
+  }
+  
+  .moreTasks {
+    position: relative;
+    font-size: 0.42rem;
+    font-family: PingFangSC-Regular, PingFang SC;
+    font-weight: 400;
+    color: #FF3232;
+    line-height: 0.5rem;
+    text-align: left;
+    padding-bottom: 0.32rem;
+  }
+  
+  .moreBtn {
+    text-align: center;
+    width: 2.2rem;
+    height: 0.88rem;
+    font-size: 0.36rem;
+    font-family: Helvetica;
+    color: #FFFFFF;
+    line-height: 0.88rem;
+    background: #00C85E;
+    border-radius: 0.44rem;
+  }
+  
+  #mapWrap {
+    height: 8rem;
+  }
+  /*.acceptedTasks{
+  height: 0.88rem;
+  font-size: 0.36rem;
+  font-family: Helvetica;
+  color: #FFFFFF;
+  line-height: 0.88rem;
+  text-align: center;
+  margin-top: 0.52rem;
+  margin-bottom: 0.24rem;
+  overflow: hidden;
+}
+.acceptedTasks>span{
+  border-radius: 0.44rem;
+  background: #00C85E;
+  width: 4.2rem;
+  float: right;
+  margin-right: 0.2rem;
+}*/
+  
+  .taskOperation {
+    height: 0.88rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  
+  .taskOperationBtn {
+    width: 2.7rem;
+    height: 0.88rem;
+    background: #00C85E;
+    font-size: 0.36rem;
+    font-family: Helvetica;
+    color: #FFFFFF;
+    line-height: 0.88rem;
+    border-radius: 0.44rem;
+    margin-bottom: 0.2rem;
+  }
+  
+  .dailyInfo {
+    padding: 0.2rem 0.2rem 0 0.2rem;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+  }
+  
+  .taskListInfo {
+    width: 3.96rem;
+    font-size: 0.42rem;
+    font-family: Helvetica;
+    color: #FF3232;
+    line-height: 0.5rem;
+    text-align: left;
+  }
+  
+  .taskListWrap {
+    background: #F8F8F8;
+  }
+  
+  .confirmContainer {
+    position: fixed;
+    z-index: 11;
+    left: 0;
+    right: 0;
+    margin: auto;
+    bottom: 0;
+    width: 7.5rem;
+    height: 50%;
+    max-height: 10.86rem;
+    min-height: 6.5rem;
+    padding: 0.2rem 0.1rem 0 0.1rem;
+    box-sizing: border-box;
+    background: #FFFFFF;
+    box-shadow: 0rem -0.2rem 0.3rem 0rem rgba(45, 37, 37, 0.12);
+    border-radius: 0.36rem 0.36rem 0rem 0rem;
+    border: 0.02rem solid #E3E3E3;
+  }
+  
+  .itemName {
+    text-align: left;
+    font-size: 0.42rem;
+    font-family: PingFangSC-Regular, PingFang SC;
+    font-weight: 400;
+    color: #000000;
+    line-height: 0.58rem;
+    padding: 0.3rem 0;
+    width: calc(100% - 1rem);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  
+  .singleList {
+    position: relative;
+    width: 80%;
+    margin: auto;
+    box-sizing: border-box;
+  }
+  
+  .cusCheckbox {
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto;
+  }
+  
+  .confirmTitle {
+    text-align: left;
+    font-size: 0.42rem;
+    font-family: Helvetica;
+    line-height: 0.56rem;
+    padding: 0 0.4rem;
+  }
+  
+  .itemLists {
+    height: 40%;
+    background: #F7F7F7;
+    overflow-y: auto;
+  }
+  
+  .payBtnWrap {
+    margin: 0.2rem 0;
+    display: flex;
+    justify-content: space-around;
+  }
+  
+  .confirm.error {
+    background: rgba(222, 21, 38, 1);
+  }
+  
+  .actionCommon.confirm {
+    width: 40%;
+  }
+  
+  .closeWindow {
+    font-size: 0.6rem;
+    position: absolute;
+    top: 0.2rem;
+    right: 0.2rem;
+  }
+  
+  .singleFormItem {
+    font-size: 0;
+  }
+  
+  .formItemTitle {
+    padding: 0.2rem;
+    font-size: 0.36rem;
+    font-family: PingFangSC-Regular, PingFang SC;
+    font-weight: 400;
+    color: #000000;
+    line-height: 0.5rem;
+    text-align: left;
+  }
+  
+  .photoBtnWrap {
+    width: 3.42rem;
+    height: 2.28rem;
+    border-radius: 0.24rem;
+    border: 0.02rem dashed #B1CADB;
+    padding: 0.16rem;
+    box-sizing: border-box;
+    margin: 0.2rem auto;
+    position: relative;
+  }
+  
+  .photoBtnWrap>div {
+    background: #EEF7FD;
+    border-radius: 0.24rem;
+    width: 100%;
+    height: 100%;
+  }
+  
+  .photoBtnWrap>div>img {
+    width: 1rem;
+    height: 1rem;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto;
+    position: absolute;
+  }
+  
+  .photoPreview {
+    width: 100%;
+    height: 1rem;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  
+  .photoPreview>img {
+    max-width: 50%;
+    height: 90%;
+    margin: 0 0.2rem;
+  }
+  
+  .errorInfoContainer {
+    height: calc(100% - 1.8rem);
+    max-height: 10.86rem;
+    overflow-y: auto;
+  }
+  
+  .loadingContent {
+    height: 2rem;
+    line-height: 1.8rem;
+    font-size: .6rem;
+    color: #00C85E;
+  }
+  
+  .taskContent{
+    width: 100%;
+    height: 1rem;
+    line-height: 0.8rem;
+    white-space: nowrap;
+		overflow: hidden;
+		overflow-x: auto;
+    margin: 0.25rem 0;
+  }
+  .taskItem{
+  	display: inline-block;
+  	width: 2rem;
+  	margin: 0 0.1rem;
+  	font-size: 0.3rem;
+  	background: rgba(200,200,200,1);
+  	border-radius: 0.4rem;
+  }
+  .taskItem.sender{
+    color: #FFFFFF !important;
+    background: rgba(34,148,55,1);
+  }
+  .taskItem.receiver{
+    color: #FFFFFF !important;
+    background: rgba(222,21,38,1);
+  }
+  .taskItem.sender.deactive{
+    color: #FFFFFF !important;
+    background: #a8a8aa;
+  }
+  .taskItem.receiver.deactive{
+    color: #FFFFFF !important;
+    background: #a8a8aa;
+  }
+</style>
